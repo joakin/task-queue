@@ -1,0 +1,31 @@
+{
+  "name": "task-queue",
+  "version": "1.0.0",
+  "description": "Task/Job queue with concurrency/capacity/abort/cancel support",
+  "main": "index.js",
+  "scripts": {
+    "test": "tape index.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joakin/task-queue.git"
+  },
+  "keywords": [
+    "task",
+    "job",
+    "queue",
+    "concurrent",
+    "cancel",
+    "abort",
+    "promise"
+  ],
+  "author": "Joaquin Oltra <joaquin@chimeces.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/joakin/task-queue/issues"
+  },
+  "homepage": "https://github.com/joakin/task-queue#readme",
+  "devDependencies": {
+    "tape": "^4.9.1"
+  }
+}
