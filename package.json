@@ -2,9 +2,10 @@
   "name": "task-queue",
   "version": "1.0.0",
   "description": "Task/Job queue with concurrency/capacity/abort/cancel support",
-  "main": "index.js",
+  "main": "lib/index.js",
   "scripts": {
-    "test": "tape index.test.js"
+    "compile": "tsc",
+    "test": "tsc && tape index.test.js"
   },
   "repository": {
     "type": "git",
@@ -26,6 +27,9 @@
   },
   "homepage": "https://github.com/joakin/task-queue#readme",
   "devDependencies": {
-    "tape": "^4.9.1"
+    "@types/node": "^10.12.14",
+    "@types/tape": "^4.2.32",
+    "tape": "^4.9.1",
+    "typescript": "^3.2.2"
   }
 }

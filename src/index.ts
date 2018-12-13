@@ -1,26 +1,64 @@
-const EventEmitter = require("events");
+import { EventEmitter } from "events";
+
+interface Job {
+  fn: () => Promise<any>;
+  cancel: () => void;
+  id: number;
+  addedToTheQueueAt: number;
+  startedProcessingAt: number | null;
+}
+
+interface JobWithFunctions {
+  job: Job;
+  resolve: ResolveFn;
+  reject: RejectFn;
+}
+
+type ResolveFn = (result: any) => void;
+type RejectFn = (error: Error) => void;
+
+interface CancellablePromise<T> extends Promise<T> {
+  cancel: () => void;
+}
+
+interface QueueInstance extends EventEmitter {
+  add: <T>(
+    fn: () => Promise<T>,
+    onCancel?: () => void
+  ) => CancellablePromise<T>;
+  stats(): QueueStats;
+}
+
+interface QueueStats {
+  jobs: {
+    total: number;
+    inProgress: number;
+    waiting: number;
+  };
+  full: boolean;
+}
 
 function Queue({
   queueTimeout = 500,
   executionTimeout = 250,
   concurrency = 1,
   maxTaskCount = 1
-} = {}) {
+} = {}): QueueInstance {
   let events = new EventEmitter();
   let lastId = 0;
-  const waitingJobs = [];
-  const inProgressJobs = [];
+  const waitingJobs: JobWithFunctions[] = [];
+  const inProgressJobs: JobWithFunctions[] = [];
   const timeouts = new Map();
   let processing = false;
 
-  function removeTimeout(id) {
+  function removeTimeout(id: number) {
     if (timeouts.has(id)) {
       clearTimeout(timeouts.get(id));
       timeouts.delete(id);
     }
   }
 
-  function setUpQueueTimeout(job, reject) {
+  function setUpQueueTimeout(job: Job, reject: RejectFn) {
     timeouts.set(
       job.id,
       setTimeout(() => {
@@ -34,7 +72,7 @@ function Queue({
     );
   }
 
-  function setUpProcessingTimeout(job, reject) {
+  function setUpProcessingTimeout(job: Job, reject: RejectFn) {
     timeouts.set(
       job.id,
       setTimeout(() => {
@@ -47,12 +85,12 @@ function Queue({
     );
   }
 
-  function cleanup(job) {
+  function cleanup(job: Job) {
     removeTimeout(job.id);
     removeJob(job);
   }
 
-  function removeJob(job) {
+  function removeJob(job: Job) {
     let arr = waitingJobs;
     let i = waitingJobs.findIndex(j => job.id === j.job.id);
     if (i == -1) {
@@ -65,7 +103,10 @@ function Queue({
     }
   }
 
-  function add(fn, onCancel) {
+  function add<T>(
+    fn: () => Promise<T>,
+    onCancel?: () => void
+  ): CancellablePromise<T> {
     if (isFull()) {
       const waitingCount = waitingJobs.length;
       const inProgressCount = inProgressJobs.length;
@@ -73,7 +114,10 @@ function Queue({
         waitingCount,
         inProgressCount
       });
-      return Promise.reject(new QueueFull(waitingCount, inProgressCount));
+      return cancellable(
+        Promise.reject(new QueueFull(waitingCount, inProgressCount)),
+        () => {}
+      );
     }
 
     const job = {
@@ -87,38 +131,39 @@ function Queue({
       startedProcessingAt: null
     };
 
-    let resolve, reject;
-    const promise = new Promise((resolve, reject_) => {
-      reject = reject_;
+    let reject: RejectFn | null;
+    const promise: CancellablePromise<T> = cancellable(
+      new Promise<T>((resolve: (result: T) => void, reject_) => {
+        reject = reject_;
 
-      setUpQueueTimeout(job, reject);
+        setUpQueueTimeout(job, reject);
 
-      waitingJobs.push({
-        job,
-        reject,
-        resolve
-      });
-      const waitingCount = waitingJobs.length;
-      const inProgressCount = inProgressJobs.length;
-      events.emit("queue.new", {
-        id: job.id,
-        inProgressCount,
-        waitingCount
-      });
+        waitingJobs.push({
+          job,
+          reject,
+          resolve
+        });
+        const waitingCount = waitingJobs.length;
+        const inProgressCount = inProgressJobs.length;
+        events.emit("queue.new", {
+          id: job.id,
+          inProgressCount,
+          waitingCount
+        });
 
-      processQueue();
-    }).finally(() => {
-      cleanup(job);
-    });
-
-    promise.cancel = function cancel() {
-      job.cancel();
-      events.emit(`process.abort`, {
-        id: job.id,
-        addedToTheQueueAt: job.addedToTheQueueAt
-      });
-      reject(new ProcessingCancelled());
-    };
+        processQueue();
+      }).finally(() => {
+        cleanup(job);
+      }),
+      function cancel() {
+        job.cancel();
+        events.emit(`process.abort`, {
+          id: job.id,
+          addedToTheQueueAt: job.addedToTheQueueAt
+        });
+        reject && reject(new ProcessingCancelled());
+      }
+    );
 
     return promise;
   }
@@ -128,17 +173,17 @@ function Queue({
   }
 
   function processQueue() {
-    if (
-      inProgressJobs.length >= concurrency ||
-      waitingJobs.length === 0 ||
-      processing
-    ) {
+    if (inProgressJobs.length >= concurrency || processing) {
       return;
     }
 
+    const jobWithFunctions = waitingJobs.shift();
+    if (!jobWithFunctions) return;
+
+    const { job, reject, resolve } = jobWithFunctions;
+
     processing = true;
 
-    const { job, reject, resolve } = waitingJobs.shift();
     removeTimeout(job.id);
 
     inProgressJobs.push({ job, reject, resolve });
@@ -163,13 +208,13 @@ function Queue({
     processing = false;
   }
 
-  function processJob(job, resolve, reject) {
+  function processJob(job: Job, resolve: ResolveFn, reject: RejectFn) {
     job.fn().then(
       (...results) => {
         events.emit("process.success", {
           id: job.id,
           addedToTheQueueAt: job.addedToTheQueueAt,
-          processStartedAt: job.processStartedAt
+          processStartedAt: job.startedProcessingAt
         });
         cleanup(job);
         resolve(...results);
@@ -179,7 +224,7 @@ function Queue({
         events.emit("process.failure", {
           id: job.id,
           addedToTheQueueAt: job.addedToTheQueueAt,
-          processStartedAt: job.processStartedAt,
+          processStartedAt: job.startedProcessingAt,
           err
         });
         cleanup(job);
@@ -219,7 +264,8 @@ class ProcessingCancelled extends Error {
  * Thrown when task timeouts in the queue
  */
 class QueueTimeout extends Error {
-  constructor(addedToTheQueueAt) {
+  addedToTheQueueAt: number;
+  constructor(addedToTheQueueAt: number) {
     super();
     this.addedToTheQueueAt = addedToTheQueueAt;
     Error.captureStackTrace(this, QueueTimeout);
@@ -230,7 +276,9 @@ class QueueTimeout extends Error {
  * Thrown when there is no space for new task
  */
 class QueueFull extends Error {
-  constructor(waitingCount, inProgressCount) {
+  waitingCount: number;
+  inProgressCount: number;
+  constructor(waitingCount: number, inProgressCount: number) {
     super();
     this.waitingCount = waitingCount;
     this.inProgressCount = inProgressCount;
@@ -248,11 +296,12 @@ class JobTimeout extends Error {
   }
 }
 
-Object.assign(Queue, {
-  ProcessingCancelled,
-  QueueTimeout,
-  QueueFull,
-  JobTimeout
-});
+function cancellable<T>(
+  promise: Promise<T>,
+  cancel: () => void
+): CancellablePromise<T> {
+  (promise as CancellablePromise<T>).cancel = cancel;
+  return promise as CancellablePromise<T>;
+}
 
-module.exports = Queue;
+export { Queue, ProcessingCancelled, QueueTimeout, QueueFull, JobTimeout };

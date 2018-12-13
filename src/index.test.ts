@@ -1,6 +1,12 @@
-const test = require("tape");
+import * as test from "tape";
 
-const Queue = require("./index.js");
+import {
+  Queue,
+  QueueFull,
+  QueueTimeout,
+  JobTimeout,
+  ProcessingCancelled
+} from "./index";
 
 process.on("unhandledRejection", err => {
   console.error(err);
@@ -11,7 +17,7 @@ test("registers and processes task correctly", assert => {
   assert.plan(4);
   const q = Queue();
   assert.equal(q.stats().jobs.total, 0, "No jobs in the queue");
-  q.add(async _ => "one")
+  q.add(async () => "one")
     .then(result => {
       assert.equal(result, "one");
     })
@@ -26,15 +32,15 @@ test("rejects new job when queue is busy", assert => {
 
   const q = Queue();
   assert.equal(q.stats().full, false, "should not be full");
-  q.add(async _ => "one").finally(() => {
+  q.add(async () => "one").finally(() => {
     assert.equal(q.stats().full, false, "should not be full");
   });
 
   assert.equal(q.stats().full, true, "should be full");
 
-  q.add(async _ => "two").catch(error => {
+  q.add(async () => "two").catch(error => {
     assert.ok(
-      error instanceof Queue.QueueFull,
+      error instanceof QueueFull,
       "second task rejects because the queue is full"
     );
   });
@@ -52,7 +58,7 @@ test("resolves promises in correct order", assert => {
   let tests = 0;
 
   // first worker must finish after 0.25 sec
-  q.add(_ => after(250, "one")).then(result => {
+  q.add(() => after(250, "one")).then(result => {
     assert.equal(result, "one");
     assert.equal(tests, 0);
     tests++;
@@ -62,7 +68,7 @@ test("resolves promises in correct order", assert => {
   assert.equal(q.stats().jobs.inProgress, 1);
 
   // second worker must finish 0.1 sec after the first one
-  q.add(_ => after(100, "two")).then(result => {
+  q.add(() => after(100, "two")).then(result => {
     assert.equal(result, "two");
     assert.equal(tests, 1);
     tests++;
@@ -72,7 +78,7 @@ test("resolves promises in correct order", assert => {
   assert.equal(q.stats().jobs.inProgress, 1);
 
   // the last worker must finish last, regardless of the timeout
-  q.add(_ => after(20, "three")).then(result => {
+  q.add(() => after(20, "three")).then(result => {
     assert.equal(result, "three");
     assert.equal(tests, 2);
   });
@@ -93,7 +99,7 @@ test("resolves concurrent promises in correct order", assert => {
   let finishedTests = 0;
 
   // first worker must finish after 0.25 sec
-  q.add(_ => after(250, "one"))
+  q.add(() => after(250, "one"))
     .then(result => {
       assert.equal(result, "one", "Task once returned incorrect result");
       finishedTests++;
@@ -108,7 +114,7 @@ test("resolves concurrent promises in correct order", assert => {
   assert.equal(q.stats().jobs.inProgress, 1);
 
   // second worker must finish 0.1 sec after adding, first one should be still processing
-  q.add(_ => after(100, "two"))
+  q.add(() => after(100, "two"))
     .then(result => {
       assert.equal(result, "two", "Task two returned incorrect result");
       assert.equal(finishedTests, 0, "Task two should finish first");
@@ -131,7 +137,7 @@ test("resolves concurrent promises in correct order", assert => {
   assert.equal(q.stats().jobs.inProgress, 2);
 
   // the last worker must finish before the first one
-  q.add(_ => after(20, "three"))
+  q.add(() => after(20, "three"))
     .then(result => {
       assert.equal(result, "three", "Task three returned incorrect result");
       assert.equal(finishedTests, 1, "Task three didn't finish second");
@@ -160,7 +166,7 @@ test("handles failed promise properly", assert => {
   let rejected = false;
   let resolved = false;
   const q = Queue();
-  q.add(_ => rejectAfter(100, "one"))
+  q.add(() => rejectAfter(100, "one"))
     .then(
       () => (resolved = true),
       rejectMsg => {
@@ -184,7 +190,7 @@ test("handles errors in the promise", assert => {
   let rejected = false;
   let resolved = false;
   const q = Queue();
-  q.add(_ => {
+  q.add(() => {
     throw new Error("failed");
   })
     .then(
@@ -206,7 +212,7 @@ test("catches errors", assert => {
   let rejected = false;
   let resolved = false;
   const q = Queue();
-  q.add(_ => {
+  q.add(() => {
     throw new Error("failed");
   })
     .then(() => (resolved = true))
@@ -232,7 +238,7 @@ test("handles queue timeout", assert => {
     concurrency: 0,
     maxTaskCount: 1
   });
-  q.add(_ => after(100, "nah"))
+  q.add(() => after(100, "nah"))
     .then(
       () => {
         throw new Error("Task didn't timeout");
@@ -240,7 +246,7 @@ test("handles queue timeout", assert => {
       err => {
         gotTimeout = true;
         assert.ok(
-          err instanceof Queue.QueueTimeout,
+          err instanceof QueueTimeout,
           "It should fail with QueueTimeout error"
         );
       }
@@ -261,7 +267,7 @@ test("handles job timeout", assert => {
     maxTaskCount: 1
   });
 
-  q.add(_ => after(200, "job_timeout"))
+  q.add(() => after(200, "job_timeout"))
     .then(
       () => {
         throw new Error("Task didn't timeout");
@@ -269,7 +275,7 @@ test("handles job timeout", assert => {
       err => {
         gotTimeout = true;
         assert.ok(
-          err instanceof Queue.JobTimeout,
+          err instanceof JobTimeout,
           "It should fail with JobTimeout error"
         );
       }
@@ -292,11 +298,11 @@ test("handles job cancel when in queue state", assert => {
     maxTaskCount: 5
   });
 
-  q.add(_ => after(50, "running")).then(value => {
+  q.add(() => after(50, "running")).then(value => {
     assert.equal(value, "running");
     runningJobSuccesful = true;
   });
-  q.add(_ => after(50, "waiting"))
+  q.add(() => after(50, "waiting"))
     .then(value => {
       assert.equal(value, "waiting");
       waitingJobSuccesful = true;
@@ -307,7 +313,7 @@ test("handles job cancel when in queue state", assert => {
       assert.ok(waitingJobSuccesful, "Waiting job should success");
     });
 
-  const promise = q.add(_ => after(10, "cancel"));
+  const promise = q.add(() => after(10, "cancel"));
 
   promise.then(
     () => {
@@ -315,7 +321,7 @@ test("handles job cancel when in queue state", assert => {
     },
     err => {
       assert.ok(
-        err instanceof Queue.ProcessingCancelled,
+        err instanceof ProcessingCancelled,
         "Job should fail with cancel error"
       );
       wasCancelled = true;
@@ -340,7 +346,7 @@ test("handles job cancel when in processing state", assert => {
     maxTaskCount: 2
   });
 
-  q.add(_ => after(100, "running"))
+  q.add(() => after(100, "running"))
     .then(value => {
       assert.equal(value, "running");
     })
@@ -348,7 +354,7 @@ test("handles job cancel when in processing state", assert => {
       assert.ok(wasCancelled, "Job should be cancelled");
     });
 
-  const promise = q.add(_ => after(50, "cancel"));
+  const promise = q.add(() => after(50, "cancel"));
 
   promise.then(
     () => {
@@ -357,7 +363,7 @@ test("handles job cancel when in processing state", assert => {
     err => {
       wasCancelled = true;
       assert.ok(
-        err instanceof Queue.ProcessingCancelled,
+        err instanceof ProcessingCancelled,
         "Job should fail with cancel error"
       );
     }
@@ -379,31 +385,31 @@ test("cancel does nothing when unknown job done", assert => {
     maxTaskCount: 5
   });
 
-  const promise = q.add(_ => after(10, "first"));
+  const promise = q.add(() => after(10, "first"));
 
   promise
     .then(() => {
       finished++;
-      return q.add(_ => after(10, "second"));
+      return q.add(() => after(10, "second"));
     })
     .then(() => {
       finished++;
       promise.cancel();
-      return q.add(_ => after(10, "third"));
+      return q.add(() => after(10, "third"));
     })
     .then(() => {
       finished++;
       assert.equal(finished, 3, "3 jobs has to be processed");
     })
-    .catch(e => {
+    .catch(_e => {
       throw new Error("All jobs have to success");
     });
 });
 
-function after(ms, value) {
+function after<T>(ms: number, value: T): Promise<T> {
   return new Promise(res => setTimeout(() => res(value), ms));
 }
 
-function rejectAfter(ms, err) {
-  return new Promise((res, rej) => setTimeout(() => rej(err), ms));
+function rejectAfter<T>(ms: number, err: T): Promise<never> {
+  return new Promise((_res, rej) => setTimeout(() => rej(err), ms));
 }
