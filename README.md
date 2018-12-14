@@ -177,8 +177,8 @@ queue.on(
 
 ## Types
 
-Here's the type (typescript format) definitions if you want to understand what
-the library does:
+Here's the type (typescript format) definitions if you want to get a better
+understanding of what types the library provides and expects:
 
 ```ts
 import { EventEmitter } from "events";
