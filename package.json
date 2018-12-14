@@ -4,9 +4,10 @@
   "description": "Task/Job queue with concurrency/capacity/abort/cancel support",
   "main": "lib/index.js",
   "scripts": {
-    "compile": "tsc",
-    "test": "tsc && tape index.test.js"
+    "compile": "tsc --declaration",
+    "test": "npm run compile -s && tape index.test.js"
   },
+  "types": "./lib/index.d.ts",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/joakin/task-queue.git"
