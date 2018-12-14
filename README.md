@@ -248,10 +248,22 @@ declare class JobTimeout extends Error {
 }
 ```
 
-## TODO
+## Rationale
 
-- Implementation
-  - Review multiple calls to `cleanup` to see if we can remove them
-- Testing
-  - Add tests for QueueFull
-  - Add tests for the event emitting
+This library is extracted from
+[wikimedia/mediawiki-services-chromium-render/lib/queue.js](https://github.com/wikimedia/mediawiki-services-chromium-render/blob/6ba6069eb46e803f9249226dbca0222c34b3cac3/lib/queue.js),
+where we needed an in-process queue for production pdf rendering services.
+
+Initially, `async.js/queue` was used, but wanting to use promises, configuring
+timeouts and cancelling jobs made the Reading Web team at the Wikimedia
+Foundation build their own task queue implementation for their production use
+case.
+
+This library is an adaptation of that work, with the following initial changes
+to it:
+
+- Good documentation, types, and public API
+- Functional API instead of OO class API
+- Renamed events and errors for consistency of the public API
+- Migrated the project to strict typescript, for easier maintainability,
+  documentation, and correctness

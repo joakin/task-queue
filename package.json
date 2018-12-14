@@ -1,7 +1,7 @@
 {
   "name": "task-queue",
   "version": "1.0.0",
-  "description": "Task/Job queue with concurrency/capacity/abort/cancel support",
+  "description": "Task/Job in-process queue with concurrency/capacity/abort/cancelling support",
   "main": "lib/index.js",
   "scripts": {
     "compile": "tsc --declaration",
