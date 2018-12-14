@@ -5,7 +5,7 @@ import {
   QueueFull,
   QueueTimeout,
   JobTimeout,
-  ProcessingCancelled
+  JobCancelled
 } from "./index";
 
 process.on("unhandledRejection", err => {
@@ -321,7 +321,7 @@ test("handles job cancel when in queue state", assert => {
     },
     err => {
       assert.ok(
-        err instanceof ProcessingCancelled,
+        err instanceof JobCancelled,
         "Job should fail with cancel error"
       );
       wasCancelled = true;
@@ -363,7 +363,7 @@ test("handles job cancel when in processing state", assert => {
     err => {
       wasCancelled = true;
       assert.ok(
-        err instanceof ProcessingCancelled,
+        err instanceof JobCancelled,
         "Job should fail with cancel error"
       );
     }

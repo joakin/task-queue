@@ -161,7 +161,7 @@ function Queue({
           id: job.id,
           addedToTheQueueAt: job.addedToTheQueueAt
         });
-        reject && reject(new ProcessingCancelled());
+        reject && reject(new JobCancelled());
       }
     );
 
@@ -251,12 +251,12 @@ function Queue({
 
 /**
  * Error thrown when job gets cancelled. The promise returned by the
- * queue gets rejected with ProcessingCancelled
+ * queue gets rejected with JobCancelled
  */
-class ProcessingCancelled extends Error {
+class JobCancelled extends Error {
   constructor() {
     super();
-    Error.captureStackTrace(this, ProcessingCancelled);
+    Error.captureStackTrace(this, JobCancelled);
   }
 }
 
@@ -304,4 +304,4 @@ function cancellable<T>(
   return promise as CancellablePromise<T>;
 }
 
-export { Queue, ProcessingCancelled, QueueTimeout, QueueFull, JobTimeout };
+export { Queue, JobCancelled, QueueTimeout, QueueFull, JobTimeout };
