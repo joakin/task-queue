@@ -76,8 +76,10 @@ function Queue({
     timeouts.set(
       job.id,
       setTimeout(() => {
-        events.emit("process.timeout", {
-          id: job.id
+        events.emit("job.timeout", {
+          id: job.id,
+          addedToTheQueueAt: job.addedToTheQueueAt,
+          startedProcessingAt: job.startedProcessingAt
         });
         job.cancel();
         reject(new JobTimeout());
@@ -157,7 +159,7 @@ function Queue({
       }),
       function cancel() {
         job.cancel();
-        events.emit(`process.abort`, {
+        events.emit(`job.cancel`, {
           id: job.id,
           addedToTheQueueAt: job.addedToTheQueueAt
         });
@@ -191,15 +193,16 @@ function Queue({
 
     try {
       job.startedProcessingAt = Date.now();
-      events.emit("process.started", {
+      events.emit("job.started", {
         id: job.id,
         addedToTheQueueAt: job.addedToTheQueueAt
       });
       processJob(job, resolve, reject);
     } catch (err) {
-      events.emit("process.failure", {
+      events.emit("job.failure", {
         id: job.id,
         addedToTheQueueAt: job.addedToTheQueueAt,
+        startedProcessingAt: job.startedProcessingAt,
         err
       });
       reject(err);
@@ -211,20 +214,20 @@ function Queue({
   function processJob(job: Job, resolve: ResolveFn, reject: RejectFn) {
     job.fn().then(
       (...results) => {
-        events.emit("process.success", {
+        events.emit("job.success", {
           id: job.id,
           addedToTheQueueAt: job.addedToTheQueueAt,
-          processStartedAt: job.startedProcessingAt
+          startedProcessingAt: job.startedProcessingAt
         });
         cleanup(job);
         resolve(...results);
         processQueue();
       },
       err => {
-        events.emit("process.failure", {
+        events.emit("job.failure", {
           id: job.id,
           addedToTheQueueAt: job.addedToTheQueueAt,
-          processStartedAt: job.startedProcessingAt,
+          startedProcessingAt: job.startedProcessingAt,
           err
         });
         cleanup(job);
