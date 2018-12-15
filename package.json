@@ -4,8 +4,8 @@
   "description": "Task/Job in-process queue with concurrency/capacity/abort/cancelling support",
   "main": "lib/index.js",
   "scripts": {
-    "compile": "tsc --declaration",
-    "test": "npm run compile -s && tape index.test.js"
+    "compile": "tsc",
+    "test": "npm run compile && tape 'lib/*.test.js'"
   },
   "types": "./lib/index.d.ts",
   "repository": {
