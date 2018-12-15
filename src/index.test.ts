@@ -9,6 +9,7 @@ import {
 } from "./index";
 
 process.on("unhandledRejection", err => {
+  console.error("Unhandled rejection");
   console.error(err);
   process.exit(1);
 });
@@ -406,10 +407,54 @@ test("cancel does nothing when unknown job done", assert => {
     });
 });
 
+test("new jobs start after a job timeout", assert => {
+  assert.plan(5);
+
+  const q = Queue({
+    queueTimeout: 5000,
+    executionTimeout: 50,
+    concurrency: 5,
+    maxTaskCount: 10
+  });
+  q.add(() => after(40, true)).then(() => {
+    const stats = q.stats();
+    assert.equal(stats.jobs.total, 9);
+    assert.equal(stats.jobs.inProgress, 5);
+  });
+  q.add(() => after(40, true)).then(() => {
+    const stats = q.stats();
+    assert.equal(stats.jobs.total, 8);
+    assert.equal(stats.jobs.inProgress, 5);
+  });
+  q.add(doNothing)
+    .catch(() => true)
+    .finally(() => {
+      const stats = q.stats();
+      assert.equal(
+        stats.jobs.inProgress,
+        5,
+        `There should be 5 jobs in progress, because there are ${
+          stats.jobs.waiting
+        } jobs waiting`
+      );
+    });
+  q.add(() => after(40, true));
+  q.add(() => after(40, true));
+  q.add(() => after(40, true));
+  q.add(() => after(40, true));
+  q.add(() => after(40, true));
+  q.add(() => after(40, true));
+  q.add(() => after(40, true));
+});
+
 function after<T>(ms: number, value: T): Promise<T> {
   return new Promise(res => setTimeout(() => res(value), ms));
 }
 
 function rejectAfter<T>(ms: number, err: T): Promise<never> {
   return new Promise((_res, rej) => setTimeout(() => rej(err), ms));
+}
+
+function doNothing() {
+  return new Promise(() => {});
 }

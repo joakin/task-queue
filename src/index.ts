@@ -156,6 +156,7 @@ function Queue({
         processQueue();
       }).finally(() => {
         cleanup(job);
+        processQueue();
       }),
       function cancel() {
         job.cancel();
